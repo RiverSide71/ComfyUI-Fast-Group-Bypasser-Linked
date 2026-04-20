@@ -15,7 +15,7 @@ without modifying any existing files and without requiring a build step.
 ```
 2. Restart ComfyUI completely (no browser-cache clear needed, but doesn't hurt).
 
-That's it - the extension auto-loads alongside the existing rgthree nodes.
+That's it! - the extension auto-loads alongside the existing rgthree nodes.
 
 ---
 
@@ -50,18 +50,15 @@ GroupName:OtherGroupName, ThirdGroup:FourthGroup
 
 ### Example
 
-You have two groups that represent different SDXL and SD 1.5 pipelines and
-you always want them to share the same bypass state:
+You have two groups that have Load Image and Image Resize nodes in them. You always want to use them together and when not using them, you want them to share the same bypass state:
 
 ```
-groupLinks = "SD 1.5:SDXL"
+groupLinks = "Load Image:Image Resize"
 ```
 
-Now if you click the **SD 1.5** toggle to bypass it, **SDXL** is
-automatically bypassed too. Click **SDXL** to enable it and **SD 1.5**
-enables as well.
+Now if you click the **Load Image** group toggle to bypass it, **Image Resize** group is automatically bypassed too. Click **Load Image** to enable it, and **Image Resize** enables as well.
 
-### Multiple linked pairs
+### Multiple linked pairs example
 
 ```
 groupLinks = "Base Model:Refiner, Upscale:Hires Fix"
@@ -78,17 +75,17 @@ active at any given time.
 
 ### Example
 
-You want to toggle between **Load Video** and **Load Image** - only one
+You want to toggle between **Load Checkpoint** and **GGUF Loader** - only one
 should ever be active:
 
 ```
-groupAlternates = "Load Video:Load Image"
+groupAlternates = "Load Checkpoint:GGUF Loader"
 ```
 
-Clicking **Load Video** ON automatically bypasses **Load Image** (and
+Clicking **Load Checkpoint** ON automatically bypasses **GGUF Loader** (and
 vice-versa).
 
-### Multiple alternate pairs
+### Multiple alternate pairs example
 
 ```
 groupAlternates = "Load Video:Load Image, Save Video:Save Image"
@@ -124,7 +121,7 @@ same time, as long as a group name only appears in one of the two maps
   `[rgthree-linked] Could not find linked group "My Group"` is logged.
   
   Check that the name in the property **exactly** matches the group title
-  shown in the Bypasser widget (including capitalisation and spaces).
+  shown in the Bypasser widget (including capitalization and spaces).
 
 **Both groups end up in the same state when they should alternate.**
 : Make sure the pair is in `groupAlternates`, not `groupLinks`.
