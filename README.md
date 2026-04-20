@@ -106,7 +106,8 @@ same time, as long as a group name only appears in one of the two maps
 
 ## Compatibility Notes
 
-| Updating rgthree-comfy | ✅ Safe | This file is separate; rgthree updates won't touch it. |
+| Updating rgthree-comfy | ✅ Safe | This file is separate; rgthree updates won't touch it.|
+
 | Nodes 2.0 (ComfyUI beta) | ⚠️ May break | rgthree itself has known issues with Nodes 2.0; disable it in ComfyUI settings if things look wrong. |
 
 ---
@@ -114,12 +115,14 @@ same time, as long as a group name only appears in one of the two maps
 ## Troubleshooting
 
 **The property fields don't appear in the Properties panel.**
-: Restart ComfyUI. The extension must load before the graph hydrates.
+: Restart ComfyUI. The extension must load before the graph shows.
 
 **A link/alternate isn't working.**
 : Open the browser console (F12 → Console). If a group name is misspelt or
   doesn't exist, a warning like
+  
   `[rgthree-linked] Could not find linked group "My Group"` is logged.
+  
   Check that the name in the property **exactly** matches the group title
   shown in the Bypasser widget (including capitalisation and spaces).
 
