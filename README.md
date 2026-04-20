@@ -1,4 +1,4 @@
-# Fast Groups Bypasser — Linked & Alternate Extension
+# Fast Groups Bypasser - Linked & Alternate Extension
 
 This single JavaScript file adds two new linking behaviors to
 rgthree's **Fast Groups Bypasser** and **Fast Groups Muter** nodes,
@@ -9,12 +9,13 @@ without modifying any existing files and without requiring a build step.
 ## Installation
 
 1. Drop `fast_groups_bypasser_linked.js` into:
-   ```
+
+```
    ComfyUI/custom_nodes/rgthree-comfy/web/comfyui/
-   ```
+```
 2. Restart ComfyUI completely (no browser-cache clear needed, but doesn't hurt).
 
-That's it — the extension auto-loads alongside the existing rgthree nodes.
+That's it - the extension auto-loads alongside the existing rgthree nodes.
 
 ---
 
@@ -38,12 +39,12 @@ GroupName:OtherGroupName, ThirdGroup:FourthGroup
 - Pairs are separated by **commas**.
 - The two group names in a pair are separated by a **colon** (`:`).
 - **Capitalization and spaces must match** your actual group titles exactly.
-- Both `groupLinks` and `groupAlternates` are **bidirectional** — you only
+- Both `groupLinks` and `groupAlternates` are **bidirectional** - you only
   need to list each pair once (A:B automatically covers B:A as well).
 
 ---
 
-## Feature 1 — Linked Groups
+## Feature 1 - Linked Groups
 
 > *"When one group is bypassed/enabled, the other is also bypassed/enabled."*
 
@@ -68,7 +69,7 @@ groupLinks = "Base Model:Refiner, Upscale:Hires Fix"
 
 ---
 
-## Feature 2 — Alternate Groups
+## Feature 2 - Alternate Groups
 
 > *"When one group is bypassed, the other is enabled, and vice-versa."*
 
@@ -77,7 +78,7 @@ active at any given time.
 
 ### Example
 
-You want to toggle between **Load Video** and **Load Image** — only one
+You want to toggle between **Load Video** and **Load Image** - only one
 should ever be active:
 
 ```
