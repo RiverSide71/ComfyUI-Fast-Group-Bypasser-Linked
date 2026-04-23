@@ -93,7 +93,7 @@ vice-versa).
 groupAlternates = "Load Video:Load Image, Save Video:Save Image"
 ```
 
-##Feature 3 - Exclusive Groups
+## Feature 3 - Exclusive Groups
 
 > *"Both groups cannot be turned on at the same time. Either one group is enabled, or both are disabled."*
 
