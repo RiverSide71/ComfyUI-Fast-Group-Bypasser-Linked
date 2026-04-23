@@ -1,10 +1,13 @@
 /**
- * rgthree Fast Groups – Linked & Alternate Extension
- * =====================================================
- * Adds two new behaviors to the Fast Groups Bypasser (and Muter) nodes:
+ * rgthree Fast Groups – Linked, Alternate & Exclusive Extension
+ * ==============================================================
+ * Adds three new behaviors to the Fast Groups Bypasser (and Muter) nodes:
  *
- *  1. LINKED groups  – When Group A is toggled, Group B mirrors the exact same state.
- *  2. ALTERNATE groups – When Group A is bypassed, Group B is enabled, and vice-versa.
+ *  1. LINKED groups    - When Group A is toggled, Group B mirrors the exact same state.
+ *  2. ALTERNATE groups - When Group A is bypassed, Group B is enabled, and vice-versa.
+ *                        One of the pair is always ON; they are never both OFF.
+ *  3. EXCLUSIVE groups - When Group A is enabled, Group B is disabled, and vice-versa.
+ *                        Both may be OFF at the same time, but never both ON.
  *
  * ── INSTALLATION ──────────────────────────────────────────────────────────────────
  * Drop this file into:
@@ -13,29 +16,39 @@
  *
  * ── CONFIGURATION ─────────────────────────────────────────────────────────────────
  * Right-click a Fast Groups Bypasser (or Muter) node → "Properties" or
- * "Properties Panel" and fill in either/both new fields:
+ * "Properties Panel" and fill in any/all of the new fields:
  *
- *   groupLinks      — comma-separated pairs separated by ":"
+ *   groupLinks      - comma-separated pairs separated by ":"
  *                     Example:  "SD 1.5:SDXL, Upscale:No Upscale"
  *                     Effect:   Toggling SD 1.5 ON also toggles SDXL ON.
  *                               Relationship is bidirectional; only define each
  *                               pair once.
  *
- *   groupAlternates — comma-separated pairs separated by ":"
+ *   groupAlternates - comma-separated pairs separated by ":"
  *                     Example:  "Load Video:Load Image, Save Video:Save Image"
  *                     Effect:   Toggling Load Video ON forces Load Image OFF
- *                               (and vice-versa). Relationship is bidirectional.
+ *                               (and vice-versa). One is always ON.
+ *                               Relationship is bidirectional.
+ *
+ *   groupExclusive  - comma-separated pairs separated by ":"
+ *                     Example:  "LoRA Pack A:LoRA Pack B, Style A:Style B"
+ *                     Effect:   Enabling either group disables the other.
+ *                               BOTH may be OFF simultaneously — that is the
+ *                               key difference from groupAlternates.
+ *                               Relationship is bidirectional.
  *
  * Multiple pairs are separated by commas:
- *   groupAlternates = "GroupA:GroupB, GroupC:GroupD"
+ *   groupExclusive = "GroupA:GroupB, GroupC:GroupD"
  *
  * ── NOTES ─────────────────────────────────────────────────────────────────────────
- * • Links/Alternates are per-node: two separate Bypasser nodes do not share state.
- * • Using "groupLinks" with a "toggleRestriction" of "max one" can conflict — the
+ * • All three relationship types are per-node: two separate Bypasser nodes do not
+ *   share state.
+ * • Using "groupLinks" with a "toggleRestriction" of "max one" can conflict - the
  *   restriction turns all others off first, then the link turns the target back on.
- *   Consider using "groupAlternates" with "max one" instead; they are compatible.
- * • The "skipOtherNodeCheck" flag passed to linked/alternated widgets bypasses the
- *   "toggleRestriction" for those secondary changes intentionally.
+ *   Consider using "groupAlternates" or "groupExclusive" with "max one" instead;
+ *   they are compatible.
+ * • The "skipOtherNodeCheck" flag passed to linked/alternated/exclusive widgets
+ *   bypasses the "toggleRestriction" for those secondary changes intentionally.
  * • Works on BOTH "Fast Groups Bypasser (rgthree)" and "Fast Groups Muter (rgthree)".
  */
 
@@ -45,6 +58,7 @@ import { app } from "../../scripts/app.js";
 
 const PROP_LINKS = "groupLinks";
 const PROP_ALTS  = "groupAlternates";
+const PROP_EXCL  = "groupExclusive";
 
 const TARGET_TYPES = [
   "Fast Groups Bypasser (rgthree)",
@@ -92,14 +106,50 @@ function findWidgetForGroup(node, groupTitle) {
   return node.widgets?.find((w) => w.label === `Enable ${groupTitle}`) ?? null;
 }
 
+/**
+ * Shared helper: apply a target value to a partner widget, with a warning
+ * if the target group cannot be found.
+ *
+ * @param {object} node         - parent node
+ * @param {string} targetTitle  - group name to look up
+ * @param {boolean} targetValue - the value to apply
+ * @param {object} self         - the originating widget (skip if same)
+ * @param {string} propName     - property name used in the warning message
+ */
+function applyToPartner(node, targetTitle, targetValue, self, propName) {
+  const targetWidget = findWidgetForGroup(node, targetTitle);
+
+  if (targetWidget && targetWidget !== self) {
+    if (targetWidget.toggled !== targetValue) {
+      // skipOtherNodeCheck=true prevents toggleRestriction from cascading
+      targetWidget.doModeChange(targetValue, true);
+    }
+  } else if (!targetWidget) {
+    console.warn(
+      `[rgthree-linked] Could not find ${propName} group "${targetTitle}" ` +
+      `on node "${node.title ?? node.type}". ` +
+      `Check spelling in the ${propName} property.`
+    );
+  }
+}
+
 // ─── Widget patching ──────────────────────────────────────────────────────────
 
 /**
  * Wrap a single toggle-row widget so that after every mode change it
- * propagates the change to any linked or alternated groups.
+ * propagates the change to any linked, alternated, or exclusive groups.
  *
  * The guard flag `node.__fgbl_propagating` prevents infinite recursion when
  * a linked widget's own doModeChange triggers back into this handler.
+ *
+ * Relationship semantics summary
+ * ┌─────────────┬───────────────────┬───────────────────┐
+ * │             │  Source turns ON  │  Source turns OFF │
+ * ├─────────────┼───────────────────┼───────────────────┤
+ * │ LINKED      │  Target → ON      │  Target → OFF     │
+ * │ ALTERNATE   │  Target → OFF     │  Target → ON      │
+ * │ EXCLUSIVE   │  Target → OFF     │  (no change)      │
+ * └─────────────┴───────────────────┴───────────────────┘
  *
  * @param {object} widget  – FastGroupsToggleRowWidget instance
  * @param {object} node    – The Fast Groups Bypasser / Muter node
@@ -120,54 +170,33 @@ function wrapWidget(widget, node) {
     if (node.__fgbl_propagating) return;
 
     // Read the final state that the original applied
-    const newValue  = this.toggled;
-    const myTitle   = this.group?.title;
+    const newValue = this.toggled;
+    const myTitle  = this.group?.title;
     if (!myTitle) return;
 
     // ── 3. Parse current property values ─────────────────────────────────────
     const links = parsePairs(node.properties?.[PROP_LINKS] || "");
     const alts  = parsePairs(node.properties?.[PROP_ALTS]  || "");
+    const excls = parsePairs(node.properties?.[PROP_EXCL]  || "");
 
     // ── 4. Set the propagation guard and apply relationships ─────────────────
     node.__fgbl_propagating = true;
     try {
       // LINKED: target mirrors the same new value
       if (links.has(myTitle)) {
-        const targetTitle  = links.get(myTitle);
-        const targetWidget = findWidgetForGroup(node, targetTitle);
-
-        if (targetWidget && targetWidget !== this) {
-          if (targetWidget.toggled !== newValue) {
-            // Pass `true` for skipOtherNodeCheck so the restriction logic
-            // doesn't cascade and interfere with what we intend here.
-            targetWidget.doModeChange(newValue, true);
-          }
-        } else if (!targetWidget) {
-          console.warn(
-            `[rgthree-linked] Could not find linked group "${targetTitle}" ` +
-            `on node "${node.title ?? node.type}". ` +
-            `Check spelling in the groupLinks property.`
-          );
-        }
+        applyToPartner(node, links.get(myTitle), newValue, this, PROP_LINKS);
       }
 
-      // ALTERNATE: target gets the inverse value
+      // ALTERNATE: target always gets the inverse value (one is always ON)
       if (alts.has(myTitle)) {
-        const targetTitle   = alts.get(myTitle);
-        const targetWidget  = findWidgetForGroup(node, targetTitle);
-        const inverseValue  = !newValue;
+        applyToPartner(node, alts.get(myTitle), !newValue, this, PROP_ALTS);
+      }
 
-        if (targetWidget && targetWidget !== this) {
-          if (targetWidget.toggled !== inverseValue) {
-            targetWidget.doModeChange(inverseValue, true);
-          }
-        } else if (!targetWidget) {
-          console.warn(
-            `[rgthree-linked] Could not find alternated group "${targetTitle}" ` +
-            `on node "${node.title ?? node.type}". ` +
-            `Check spelling in the groupAlternates property.`
-          );
-        }
+      // EXCLUSIVE: only act when this group is being turned ON —
+      //            force the partner OFF.  When turning OFF, leave the
+      //            partner alone so both can be OFF at the same time.
+      if (excls.has(myTitle) && newValue === true) {
+        applyToPartner(node, excls.get(myTitle), false, this, PROP_EXCL);
       }
     } finally {
       // Always release the guard so future independent toggles work normally
@@ -180,7 +209,7 @@ function wrapWidget(widget, node) {
 
 /**
  * Patch a Fast Groups Bypasser/Muter node instance:
- *  - Ensure the two new properties exist on the instance.
+ *  - Ensure the three new properties exist on the instance.
  *  - Register the property types on the class so they appear in the
  *    Properties panel for every instance.
  *  - Wrap `refreshWidgets` so new widgets are patched as they are created.
@@ -197,17 +226,15 @@ function wrapNode(node) {
   node.properties ??= {};
   if (node.properties[PROP_LINKS] === undefined) node.properties[PROP_LINKS] = "";
   if (node.properties[PROP_ALTS]  === undefined) node.properties[PROP_ALTS]  = "";
+  if (node.properties[PROP_EXCL]  === undefined) node.properties[PROP_EXCL]  = "";
 
   // ── Register property types on the class so the Properties panel shows them ─
   //    The "@propertyName" static convention is used by rgthree's base node.
   const NodeClass = Object.getPrototypeOf(node)?.constructor;
   if (NodeClass) {
-    if (!NodeClass[`@${PROP_LINKS}`]) {
-      NodeClass[`@${PROP_LINKS}`] = { type: "string" };
-    }
-    if (!NodeClass[`@${PROP_ALTS}`]) {
-      NodeClass[`@${PROP_ALTS}`] = { type: "string" };
-    }
+    if (!NodeClass[`@${PROP_LINKS}`]) NodeClass[`@${PROP_LINKS}`] = { type: "string" };
+    if (!NodeClass[`@${PROP_ALTS}`])  NodeClass[`@${PROP_ALTS}`]  = { type: "string" };
+    if (!NodeClass[`@${PROP_EXCL}`])  NodeClass[`@${PROP_EXCL}`]  = { type: "string" };
   }
 
   // ── Wrap refreshWidgets so every newly created widget gets patched ───────────
@@ -239,8 +266,8 @@ app.registerExtension({
 
   /**
    * `setup` runs after all extensions are initialised.
-   * Patch any nodes that already exist in the graph (e.g. on a page refresh
-   * where the graph re-hydrates from the session before our nodeCreated fires).
+   * Patch any nodes that already exist in the graph (e.g., on a page refresh
+   * where the graph refreshes from the session before our nodeCreated fires).
    */
   setup() {
     for (const node of app.graph?._nodes ?? []) {
@@ -251,7 +278,7 @@ app.registerExtension({
   },
 
   /**
-   * `nodeCreated` fires whenever a node is instantiated — both when the user
+   * `nodeCreated` fires whenever a node is instantiated - both when the user
    * drags one from the menu AND when a saved workflow is loaded.
    *
    * We defer by one animation frame so that rgthree's own `loadedGraphNode`
@@ -267,7 +294,8 @@ app.registerExtension({
   /**
    * `loadedGraphNode` fires after a node's serialised data has been applied.
    * This guarantees that `node.properties` already contains any saved
-   * `groupLinks` / `groupAlternates` values, so `wrapNode` will pick them up.
+   * `groupLinks` / `groupAlternates` / `groupExclusive` values, so `wrapNode`
+   * will pick them up.
    *
    * We use a second rAF here because `refreshWidgets` for Fast Groups nodes
    * may be triggered by the FastGroupsService slightly after this callback.

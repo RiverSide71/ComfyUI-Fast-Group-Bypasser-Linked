@@ -1,6 +1,6 @@
 # Fast Groups Bypasser - Linked & Alternate Extension
 
-This single JavaScript file adds two new linking behaviors to
+This single JavaScript file adds three new linking behaviors to
 rgthree's **Fast Groups Bypasser** and **Fast Groups Muter** nodes,
 without modifying any existing files and without requiring a build step.
 
@@ -23,23 +23,25 @@ That's it! - the extension auto-loads alongside the existing rgthree nodes.
 
 After installation, right-click any **Fast Groups Bypasser** or
 **Fast Groups Muter** node and open **"Properties"** (or "Properties Panel").
-You will find two new fields:
+You will find three new fields:
 
 | Property | Behavior |
 |---|---|
 | `groupLinks` | When Group A is toggled, Group B mirrors the **same** state. |
 | `groupAlternates` | When Group A is toggled ON, Group B is forced OFF, and vice-versa. |
+| `groupExclusive` | When Group A is toggled ON, Group B is forced OFF, and vice-versa. Both may be OFF at the same time, but never both ON |
 
 ### Syntax
 
-Both fields use the same format:
+All three fields use the same format:
+
 ```
 GroupName:OtherGroupName, ThirdGroup:FourthGroup
 ```
 - Pairs are separated by **commas**.
 - The two group names in a pair are separated by a **colon** (`:`).
 - **Capitalization and spaces must match** your actual group titles exactly.
-- Both `groupLinks` and `groupAlternates` are **bidirectional** - you only
+- All three, `groupLinks`, `groupAlternates` and `groupExclusive` are **bidirectional** - you only
   need to list each pair once (A:B automatically covers B:A as well).
 
 ---
@@ -91,9 +93,41 @@ vice-versa).
 groupAlternates = "Load Video:Load Image, Save Video:Save Image"
 ```
 
+##Feature 3 - Exclusive Groups
+
+> *"Both groups cannot be turned on at the same time. Either one group is enabled, or both are disabled."*
+
+This is the "NAND switch" pattern: while both groups are in a groupAlternates link both can sit in the OFF state simultaneously. This is the precise distinction from groupAlternates, which always forces the inverse regardless of direction.
+
+### Example
+
+You want to toggle between **LoRa Pack A** and **LoRa Pack B** - only one should ever be active, however, both can be turned off for you to try generating without any LoRa.
+
+```
+groupExclusive = "LoRa Pack A:LoRa Pack B"
+```
+
+Clicking **LoRa Pack A** ON turns **LoRa Pack B** OFF and vice versa. It is also possible to turn **LoRa Pack A** OFF, keeping **LoRa Pack B** OFF as well.
+
+### Multiple alternate pairs example
+
+```
+groupAlternates = "LRA Pack A:LoRa Pack B, Style A:Style B"
+```
+
 ---
 
-## Combining Both Properties
+##  Relationship Semantics Summary
+
+ * ┌─────────────┬───────────────────┬───────────────────┐
+ * │             │  Source turns ON  │  Source turns OFF │
+ * ├─────────────┼───────────────────┼───────────────────┤
+ * │ LINKED      │  Target → ON      │  Target → OFF     │
+ * │ ALTERNATE   │  Target → OFF     │  Target → ON      │
+ * │ EXCLUSIVE   │  Target → OFF     │  (no change)      │
+ * └─────────────┴───────────────────┴───────────────────┘
+
+## Combining Properties
 
 You can use `groupLinks` and `groupAlternates` on the **same node** at the
 same time, as long as a group name only appears in one of the two maps
