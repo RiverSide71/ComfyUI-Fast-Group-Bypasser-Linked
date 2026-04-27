@@ -138,13 +138,15 @@ groupExclusive = "Style X:Style Y:Style Z", "LoRa Pack A:LoRa Pack B:LoRa Pack C
 
 ##  Relationship Semantics Summary
 
- * ┌─────────────┬─────────────────────────────┬────────────────────────────┐
- * │             │       Source turns ON       │      Source turns OFF      │
- * ├─────────────┼─────────────────────────────┼────────────────────────────┤
- * │ LINKED      │ All others → ON             │ All others → OFF           │
- * │ ALTERNATE   │ All others → OFF            │ Circular-next member → ON  │
- * │ EXCLUSIVE   │ All others → OFF            │ (no change to others)      │
- * └─────────────┴─────────────────────────────┴────────────────────────────┘
+```
+┌─────────────┬─────────────────────────────┬────────────────────────────┐
+│             │       Source turns ON       │      Source turns OFF      │
+├─────────────┼─────────────────────────────┼────────────────────────────┤
+│ LINKED      │ All others → ON             │ All others → OFF           │
+│ ALTERNATE   │ All others → OFF            │ Circular-next member → ON  │
+│ EXCLUSIVE   │ All others → OFF            │ (no change to others)      │
+└─────────────┴─────────────────────────────┴────────────────────────────┘
+```
 
 ## Combining Properties
 
@@ -163,7 +165,9 @@ same time, as long as a group name only appears in one of the two maps
 ## General Notes
 
 > *All three relationship types are per-node: two separate Bypasser nodes do not share state.
-> *Works on BOTH "Fast Groups Bypasser (rgthree)" and  "Fast Groups Muter (rgthree)".
+
+> *Works on both "Fast Groups Bypasser (rgthree)" and  "Fast Groups Muter (rgthree)".
+
 ---
 
 ## Troubleshooting
