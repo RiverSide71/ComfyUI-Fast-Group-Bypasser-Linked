@@ -27,19 +27,19 @@ You will find three new fields:
 
 | Property | Behavior |
 |---|---|
-| `groupLinks` | When Group A is toggled, Group B mirrors the **same** state. |
-| `groupAlternates` | When Group A is toggled ON, Group B is forced OFF, and vice-versa. |
-| `groupExclusive` | When Group A is toggled ON, Group B is forced OFF, and vice-versa. Both may be OFF at the same time, but never both ON |
+| `groupLinks` | When Group A is toggled, Group B mirrors the **same** state. Multiple groups can be linked|
+| `groupAlternates` | When Group A is toggled ON, Group B is forced OFF, and vice-versa. Multiple groups can be alternates of the other. Groups alternate in the sequence they are entered. |
+| `groupExclusive` | When Group A is toggled ON, Group B is forced OFF, and vice-versa. Both may be OFF at the same time, but never both ON. Multiple groups can be in a group exclusive relationship.|
 
 ### Syntax
 
 All three fields use the same format:
 
 ```
-GroupName:OtherGroupName, ThirdGroup:FourthGroup
+GroupName:OtherGroupName, ThirdGroup:FourthGroup, Stage1:Stage2:Stage3:Stage4
 ```
-- Pairs are separated by **commas**.
-- The two group names in a pair are separated by a **colon** (`:`).
+- Pairs and Lists are separated by **commas**.
+- The group names in the link are separated by a **colon** (`:`).
 - **Capitalization and spaces must match** your actual group titles exactly.
 - All three, `groupLinks`, `groupAlternates` and `groupExclusive` are **bidirectional** - you only
   need to list each pair once (A:B automatically covers B:A as well).
@@ -48,7 +48,7 @@ GroupName:OtherGroupName, ThirdGroup:FourthGroup
 
 ## Feature 1 - Linked Groups
 
-> *"When one group is bypassed/enabled, the other is also bypassed/enabled."*
+> *"When one group is bypassed/enabled, the other(s) is(are) also bypassed/enabled."*
 
 ### Example
 
@@ -66,13 +66,19 @@ Now if you click the **Load Image** group toggle to bypass it, **Image Resize** 
 groupLinks = "Base Model:Refiner, Upscale:Hires Fix"
 ```
 
+### Several linked groups example
+
+```
+groupLinks = "Group A:Group B:Group C:Group D, Group E:Group F:Group G"
+```
+
 ---
 
 ## Feature 2 - Alternate Groups
 
-> *"When one group is bypassed, the other is enabled, and vice-versa."*
+> *"When one group is bypassed, the other(s) is(are) enabled, and vice-versa."*
 
-This is the "XOR switch" pattern: exactly one of the two groups should be
+This is the "XOR switch" pattern: exactly one of the two(or many) groups should be
 active at any given time.
 
 ### Example
@@ -93,11 +99,18 @@ vice-versa).
 groupAlternates = "Load Video:Load Image, Save Video:Save Image"
 ```
 
+### Several alternate groups example
+
+```
+groupAlternates = "Load Video:Load Image:Load Webcam"
+```
+Enabling any member disables all others in the set. Disabling the active member enables the NEXT member in the defined order (circularly), so at least one is always ON.
+
 ## Feature 3 - Exclusive Groups
 
-> *"Both groups cannot be turned on at the same time. Either one group is enabled, or both are disabled."*
+> *"Both(or all) groups cannot be turned on at the same time. Either one group is enabled, or both(all) are disabled."*
 
-This is the "NAND switch" pattern: while both groups are in a groupAlternates link both can sit in the OFF state simultaneously. This is the precise distinction from groupAlternates, which always forces the inverse regardless of direction.
+This is the "NAND switch" pattern: while both(or all) groups are in a groupAlternates link. Both(or all) can sit in the OFF state simultaneously. This is the precise distinction from groupAlternates, which always forces the inverse regardless of direction.
 
 ### Example
 
@@ -109,23 +122,29 @@ groupExclusive = "LoRa Pack A:LoRa Pack B"
 
 Clicking **LoRa Pack A** ON turns **LoRa Pack B** OFF and vice versa. It is also possible to turn **LoRa Pack A** OFF, keeping **LoRa Pack B** OFF as well.
 
-### Multiple alternate pairs example
+### Multiple exclusive pairs example
 
 ```
-groupAlternates = "LRA Pack A:LoRa Pack B, Style A:Style B"
+groupExclusive = "LRA Pack A:LoRa Pack B, Style A:Style B"
+```
+
+### Several exclusive groups example
+
+```
+groupExclusive = "Style X:Style Y:Style Z", "LoRa Pack A:LoRa Pack B:LoRa Pack C"
 ```
 
 ---
 
 ##  Relationship Semantics Summary
 
- * ┌─────────────┬───────────────────┬───────────────────┐
- * │             │  Source turns ON  │  Source turns OFF │
- * ├─────────────┼───────────────────┼───────────────────┤
- * │ LINKED      │  Target → ON      │  Target → OFF     │
- * │ ALTERNATE   │  Target → OFF     │  Target → ON      │
- * │ EXCLUSIVE   │  Target → OFF     │  (no change)      │
- * └─────────────┴───────────────────┴───────────────────┘
+ * ┌─────────────┬─────────────────────────────┬────────────────────────────┐
+ * │             │       Source turns ON       │      Source turns OFF      │
+ * ├─────────────┼─────────────────────────────┼────────────────────────────┤
+ * │ LINKED      │ All others → ON             │ All others → OFF           │
+ * │ ALTERNATE   │ All others → OFF            │ Circular-next member → ON  │
+ * │ EXCLUSIVE   │ All others → OFF            │ (no change to others)      │
+ * └─────────────┴─────────────────────────────┴────────────────────────────┘
 
 ## Combining Properties
 
@@ -141,6 +160,10 @@ same time, as long as a group name only appears in one of the two maps
 
 | Nodes 2.0 (ComfyUI beta) | ⚠️ May break | rgthree itself has known issues with Nodes 2.0; disable it in ComfyUI settings if things look wrong. |
 
+## General Notes
+
+> *All three relationship types are per-node: two separate Bypasser nodes do not share state.
+> *Works on BOTH "Fast Groups Bypasser (rgthree)" and  "Fast Groups Muter (rgthree)".
 ---
 
 ## Troubleshooting

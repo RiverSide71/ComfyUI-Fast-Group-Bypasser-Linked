@@ -1,55 +1,75 @@
 /**
- * rgthree Fast Groups – Linked, Alternate & Exclusive Extension
+ * rgthree Fast Groups - Linked, Alternate & Exclusive Extension
  * ==============================================================
  * Adds three new behaviors to the Fast Groups Bypasser (and Muter) nodes:
  *
- *  1. LINKED groups    - When Group A is toggled, Group B mirrors the exact same state.
- *  2. ALTERNATE groups - When Group A is bypassed, Group B is enabled, and vice-versa.
- *                        One of the pair is always ON; they are never both OFF.
- *  3. EXCLUSIVE groups - When Group A is enabled, Group B is disabled, and vice-versa.
- *                        Both may be OFF at the same time, but never both ON.
+ *  1. LINKED groups    - When any group in a set is toggled, all others mirror
+ *                        the exact same state.
  *
- * ── INSTALLATION ──────────────────────────────────────────────────────────────────
+ *  2. ALTERNATE groups - When any group in a set is enabled, all others are
+ *                        disabled. When the active group is disabled, the NEXT
+ *                        group in the defined order (circular) is enabled.
+ *                        At least one group is always ON.
+ *
+ *  3. EXCLUSIVE groups - When any group in a set is enabled, all others are
+ *                        disabled. Disabling a group leaves the others alone,
+ *                        so ALL may be OFF simultaneously - this is the key
+ *                        difference from groupAlternates.
+ *
+ * ── INSTALLATION ──────────────────────────────────────────────────────────────
  * Drop this file into:
  *   ComfyUI/custom_nodes/rgthree-comfy/web/comfyui/fast_groups_bypasser_linked.js
  * Then restart ComfyUI (no build step needed).
  *
- * ── CONFIGURATION ─────────────────────────────────────────────────────────────────
+ * ── CONFIGURATION ─────────────────────────────────────────────────────────────
  * Right-click a Fast Groups Bypasser (or Muter) node → "Properties" or
- * "Properties Panel" and fill in any/all of the new fields:
+ * "Properties Panel" and fill in any/all of the new fields.
  *
- *   groupLinks      - comma-separated pairs separated by ":"
+ * Each property accepts comma-separated sets. Within a set, group names are
+ * separated by colons. Sets may contain TWO OR MORE groups:
+ *
+ *   groupLinks      — comma-separated sets separated by ":"
  *                     Example:  "SD 1.5:SDXL, Upscale:No Upscale"
- *                     Effect:   Toggling SD 1.5 ON also toggles SDXL ON.
- *                               Relationship is bidirectional; only define each
- *                               pair once.
+ *                               "A:B:C:D, E:F:G"
+ *                     Effect:   Toggling any member ON/OFF also sets every
+ *                               other member in that set to the same state.
+ *                               Relationship is bidirectional; define each
+ *                               set only once.
  *
- *   groupAlternates - comma-separated pairs separated by ":"
- *                     Example:  "Load Video:Load Image, Save Video:Save Image"
- *                     Effect:   Toggling Load Video ON forces Load Image OFF
- *                               (and vice-versa). One is always ON.
+ *   groupAlternates — comma-separated sets separated by ":"
+ *                     Example:  "Load Video:Load Image:Load Webcam"
+ *                               "Save Video:Save Image, Mode A:Mode B:Mode C"
+ *                     Effect:   Enabling any member disables all others in
+ *                               the set (radio-button style). Disabling the
+ *                               active member enables the NEXT member in the
+ *                               defined order (circularly), so at least one
+ *                               is always ON.
  *                               Relationship is bidirectional.
  *
- *   groupExclusive  - comma-separated pairs separated by ":"
- *                     Example:  "LoRA Pack A:LoRA Pack B, Style A:Style B"
- *                     Effect:   Enabling either group disables the other.
- *                               BOTH may be OFF simultaneously — that is the
- *                               key difference from groupAlternates.
+ *   groupExclusive  — comma-separated sets separated by ":"
+ *                     Example:  "LoRA A:LoRA B:LoRA C, Style X:Style Y"
+ *                     Effect:   Enabling any member disables all others in
+ *                               the set. Disabling a member leaves the others
+ *                               unchanged - all members may be OFF at the
+ *                               same time.
  *                               Relationship is bidirectional.
  *
- * Multiple pairs are separated by commas:
- *   groupExclusive = "GroupA:GroupB, GroupC:GroupD"
+ * Multiple sets are separated by commas:
+ *   groupExclusive = "GroupA:GroupB:GroupC, GroupD:GroupE"
  *
- * ── NOTES ─────────────────────────────────────────────────────────────────────────
- * • All three relationship types are per-node: two separate Bypasser nodes do not
- *   share state.
- * • Using "groupLinks" with a "toggleRestriction" of "max one" can conflict - the
- *   restriction turns all others off first, then the link turns the target back on.
- *   Consider using "groupAlternates" or "groupExclusive" with "max one" instead;
- *   they are compatible.
+ * ── NOTES ─────────────────────────────────────────────────────────────────────
+ * • All three relationship types are per-node: two separate Bypasser nodes do
+ *   not share state.
+ * • Using "groupLinks" with a "toggleRestriction" of "max one" can conflict -
+ *   the restriction turns all others off first, then the link turns the target
+ *   back on. Consider using "groupAlternates" or "groupExclusive" with
+ *   "max one" instead; they are compatible.
  * • The "skipOtherNodeCheck" flag passed to linked/alternated/exclusive widgets
  *   bypasses the "toggleRestriction" for those secondary changes intentionally.
- * • Works on BOTH "Fast Groups Bypasser (rgthree)" and "Fast Groups Muter (rgthree)".
+ * • Works on BOTH "Fast Groups Bypasser (rgthree)" and
+ *   "Fast Groups Muter (rgthree)".
+ * • For groupAlternates with N > 2 members, "circular next" order is
+ *   determined by left-to-right position in the property string.
  */
 
 import { app } from "../../scripts/app.js";
@@ -68,29 +88,53 @@ const TARGET_TYPES = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Parse a "GroupA:GroupB, GroupC:GroupD" string into a bidirectional Map.
- * Each pair is automatically registered in both directions so the user only
- * has to write each pair once.
+ * Parse a "A:B:C, D:E:F:G" string into a bidirectional Map where every
+ * member of a colon-delimited set maps to the metadata for that set.
+ *
+ * Each set may contain TWO or more group names.  Multiple sets are separated
+ * by commas.  If the same group name appears in more than one set (unusual
+ * but allowed), its "others" list is the union of all other members across
+ * every set it belongs to; the "all" list is the one from the first matching
+ * set (used only for ALTERNATE cycling order).
+ *
+ * Returned map shape:
+ *   Map<groupTitle, { others: string[], all: string[] }>
+ *
+ *   others – every member of the set EXCEPT this one (broadcast targets)
+ *   all    – the complete ordered member list including this one
+ *             (used by ALTERNATE to find the circular-next member)
  *
  * @param {string} str
- * @returns {Map<string, string>}
+ * @returns {Map<string, { others: string[], all: string[] }>}
  */
-function parsePairs(str) {
+function parseSets(str) {
   const map = new Map();
   if (!str?.trim()) return map;
 
   for (const part of str.split(",")) {
-    const colonIdx = part.indexOf(":");
-    if (colonIdx === -1) continue;
+    // Split on ":" to get every member of this set
+    const members = part.split(":").map((s) => s.trim()).filter(Boolean);
+    if (members.length < 2) continue; // need at least a pair
 
-    const a = part.slice(0, colonIdx).trim();
-    const b = part.slice(colonIdx + 1).trim();
+    for (let i = 0; i < members.length; i++) {
+      const member = members[i];
+      const others = members.filter((_, j) => j !== i);
 
-    if (a && b) {
-      map.set(a, b); // A → B
-      map.set(b, a); // B → A  (bidirectional)
+      if (map.has(member)) {
+        // Merge: union the others list (preserve first-seen "all" ordering)
+        const entry = map.get(member);
+        for (const o of others) {
+          if (!entry.others.includes(o)) entry.others.push(o);
+        }
+      } else {
+        map.set(member, {
+          others: [...others],   // everyone else in this set
+          all:    [...members],  // full ordered list (for ALTERNATE cycling)
+        });
+      }
     }
   }
+
   return map;
 }
 
@@ -107,14 +151,14 @@ function findWidgetForGroup(node, groupTitle) {
 }
 
 /**
- * Shared helper: apply a target value to a partner widget, with a warning
- * if the target group cannot be found.
+ * Apply a target value to a single partner widget, with a warning if the
+ * target group cannot be found.
  *
- * @param {object} node         - parent node
- * @param {string} targetTitle  - group name to look up
- * @param {boolean} targetValue - the value to apply
- * @param {object} self         - the originating widget (skip if same)
- * @param {string} propName     - property name used in the warning message
+ * @param {object}  node         - parent node
+ * @param {string}  targetTitle  - group name to look up
+ * @param {boolean} targetValue  - the value to apply
+ * @param {object}  self         - the originating widget (skip if same)
+ * @param {string}  propName     - property name used in the warning message
  */
 function applyToPartner(node, targetTitle, targetValue, self, propName) {
   const targetWidget = findWidgetForGroup(node, targetTitle);
@@ -133,6 +177,21 @@ function applyToPartner(node, targetTitle, targetValue, self, propName) {
   }
 }
 
+/**
+ * Convenience wrapper: broadcast a value to every title in an array.
+ *
+ * @param {object}   node          - parent node
+ * @param {string[]} targetTitles  - group names to update
+ * @param {boolean}  targetValue   - the value to apply to each
+ * @param {object}   self          - originating widget (skip if same)
+ * @param {string}   propName      - property name for warning messages
+ */
+function applyToPartners(node, targetTitles, targetValue, self, propName) {
+  for (const title of targetTitles) {
+    applyToPartner(node, title, targetValue, self, propName);
+  }
+}
+
 // ─── Widget patching ──────────────────────────────────────────────────────────
 
 /**
@@ -142,20 +201,24 @@ function applyToPartner(node, targetTitle, targetValue, self, propName) {
  * The guard flag `node.__fgbl_propagating` prevents infinite recursion when
  * a linked widget's own doModeChange triggers back into this handler.
  *
- * Relationship semantics summary
- * ┌─────────────┬───────────────────┬───────────────────┐
- * │             │  Source turns ON  │  Source turns OFF │
- * ├─────────────┼───────────────────┼───────────────────┤
- * │ LINKED      │  Target → ON      │  Target → OFF     │
- * │ ALTERNATE   │  Target → OFF     │  Target → ON      │
- * │ EXCLUSIVE   │  Target → OFF     │  (no change)      │
- * └─────────────┴───────────────────┴───────────────────┘
+ * Relationship semantics for N-member sets
+ * ┌─────────────┬─────────────────────────────┬────────────────────────────┐
+ * │             │       Source turns ON        │      Source turns OFF      │
+ * ├─────────────┼─────────────────────────────┼────────────────────────────┤
+ * │ LINKED      │ All others → ON             │ All others → OFF           │
+ * │ ALTERNATE   │ All others → OFF            │ Circular-next member → ON  │
+ * │ EXCLUSIVE   │ All others → OFF            │ (no change to others)      │
+ * └─────────────┴─────────────────────────────┴────────────────────────────┘
  *
- * @param {object} widget  – FastGroupsToggleRowWidget instance
- * @param {object} node    – The Fast Groups Bypasser / Muter node
+ * For ALTERNATE, "circular-next" is the member that appears immediately after
+ * the source in the left-to-right order of the property string, wrapping
+ * around to the first member when the source is last.
+ *
+ * @param {object} widget  - FastGroupsToggleRowWidget instance
+ * @param {object} node    - The Fast Groups Bypasser / Muter node
  */
 function wrapWidget(widget, node) {
-  // Idempotent – never double-wrap
+  // Idempotent - never double-wrap
   if (widget.__fgbl_patched) return;
   widget.__fgbl_patched = true;
 
@@ -165,7 +228,7 @@ function wrapWidget(widget, node) {
     // ── 1. Run the original toggle logic ────────────────────────────────────
     _origDoModeChange(force, skipOtherNodeCheck);
 
-    // ── 2. If we are already inside a link propagation, stop here ───────────
+    // ── 2. Stop if we are already inside a link propagation ─────────────────
     //       This prevents A→B→A→B… infinite loops.
     if (node.__fgbl_propagating) return;
 
@@ -175,29 +238,47 @@ function wrapWidget(widget, node) {
     if (!myTitle) return;
 
     // ── 3. Parse current property values ─────────────────────────────────────
-    const links = parsePairs(node.properties?.[PROP_LINKS] || "");
-    const alts  = parsePairs(node.properties?.[PROP_ALTS]  || "");
-    const excls = parsePairs(node.properties?.[PROP_EXCL]  || "");
+    const links = parseSets(node.properties?.[PROP_LINKS] || "");
+    const alts  = parseSets(node.properties?.[PROP_ALTS]  || "");
+    const excls = parseSets(node.properties?.[PROP_EXCL]  || "");
 
     // ── 4. Set the propagation guard and apply relationships ─────────────────
     node.__fgbl_propagating = true;
     try {
-      // LINKED: target mirrors the same new value
+
+      // ── LINKED ──────────────────────────────────────────────────────────────
+      // Every other member of the set mirrors the same new value.
       if (links.has(myTitle)) {
-        applyToPartner(node, links.get(myTitle), newValue, this, PROP_LINKS);
+        const { others } = links.get(myTitle);
+        applyToPartners(node, others, newValue, this, PROP_LINKS);
       }
 
-      // ALTERNATE: target always gets the inverse value (one is always ON)
+      // ── ALTERNATE ───────────────────────────────────────────────────────────
+      // Turning ON  → all others go OFF (radio-button exclusivity).
+      // Turning OFF → the circular-next member turns ON (always-on guarantee).
       if (alts.has(myTitle)) {
-        applyToPartner(node, alts.get(myTitle), !newValue, this, PROP_ALTS);
+        const { others, all } = alts.get(myTitle);
+
+        if (newValue === true) {
+          // Enforce mutual exclusivity: disable every sibling
+          applyToPartners(node, others, false, this, PROP_ALTS);
+        } else {
+          // Find and activate the next member in circular order
+          const myIdx    = all.indexOf(myTitle);
+          const nextIdx  = (myIdx + 1) % all.length;
+          const nextTitle = all[nextIdx];
+          applyToPartner(node, nextTitle, true, this, PROP_ALTS);
+        }
       }
 
-      // EXCLUSIVE: only act when this group is being turned ON —
-      //            force the partner OFF.  When turning OFF, leave the
-      //            partner alone so both can be OFF at the same time.
+      // ── EXCLUSIVE ───────────────────────────────────────────────────────────
+      // Turning ON  → all others go OFF.
+      // Turning OFF → no-op; all members may be OFF at the same time.
       if (excls.has(myTitle) && newValue === true) {
-        applyToPartner(node, excls.get(myTitle), false, this, PROP_EXCL);
+        const { others } = excls.get(myTitle);
+        applyToPartners(node, others, false, this, PROP_EXCL);
       }
+
     } finally {
       // Always release the guard so future independent toggles work normally
       node.__fgbl_propagating = false;
@@ -218,7 +299,7 @@ function wrapWidget(widget, node) {
  * @param {object} node
  */
 function wrapNode(node) {
-  // Idempotent – never double-wrap
+  // Idempotent - never double-wrap
   if (node.__fgbl_patched) return;
   node.__fgbl_patched = true;
 
@@ -228,7 +309,7 @@ function wrapNode(node) {
   if (node.properties[PROP_ALTS]  === undefined) node.properties[PROP_ALTS]  = "";
   if (node.properties[PROP_EXCL]  === undefined) node.properties[PROP_EXCL]  = "";
 
-  // ── Register property types on the class so the Properties panel shows them ─
+  // ── Register property types on the class so the Properties panel shows them -
   //    The "@propertyName" static convention is used by rgthree's base node.
   const NodeClass = Object.getPrototypeOf(node)?.constructor;
   if (NodeClass) {
@@ -267,7 +348,7 @@ app.registerExtension({
   /**
    * `setup` runs after all extensions are initialised.
    * Patch any nodes that already exist in the graph (e.g., on a page refresh
-   * where the graph refreshes from the session before our nodeCreated fires).
+   * where the graph refrehes from the session before our nodeCreated fires).
    */
   setup() {
     for (const node of app.graph?._nodes ?? []) {
