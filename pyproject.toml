@@ -1,7 +1,7 @@
 [project]
-name = "fast-group-bypasser-linked"
-description = "Adds three new linking behaviors to rgthree's Fast Groups Bypasser and Fast Groups Muter nodes."
-version = "1.0.0"
+name = "comfyui-fast-group-bypasser-linked"
+description = "Injects three new linking behaviors to rgthree's Fast Groups Bypasser and Fast Groups Muter nodes."
+version = "1.0.1"
 license = { file = "LICENSE" } 
 # classifiers = [
 #     # For OS-independent nodes (works on all operating systems)
@@ -28,7 +28,7 @@ Documentation = "https://github.com/RiverSide71/ComfyUI-Fast-Group-Bypasser-Link
 
 [tool.comfy]
 PublisherId = "river-side"
-DisplayName = "fast-group-bypasser-linked"
-Icon = ""
+DisplayName = "Fast Groups Bypasser - Linked & Alternate"
+Icon = "🔗"
 includes = [] 
 
