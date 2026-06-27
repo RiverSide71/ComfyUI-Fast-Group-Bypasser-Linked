@@ -8,11 +8,17 @@ without modifying any existing files and without requiring a build step.
 
 ## Installation
 
-1. Drop `fast_groups_bypasser_linked.js` into:
+### Method 1: ComfyUI Registry / Manager (Recommended)
+* Search for **Fast Groups Bypasser - Linked & Alternate** in the ComfyUI Manager and click Install.
+* Alternatively, install via Comfy-CLI: `comfy-cli node install comfyui-fast-group-bypasser-linked`
 
+### Method 2: Manual Git Clone
+Clone this repository directly into your `ComfyUI/custom_nodes/` directory:
+```bash
+git clone https://github.com/RiverSide71/ComfyUI-Fast-Group-Bypasser-Linked.git
 ```
-   ComfyUI/custom_nodes/rgthree-comfy/web/comfyui/
-```
+*(Note: Do **not** place this repository inside the `rgthree-comfy` folder. ComfyUI will automatically detect the extension globally).*
+
 2. Restart ComfyUI completely (no browser-cache clear needed, but doesn't hurt).
 
 That's it! - the extension auto-loads alongside the existing rgthree nodes.
